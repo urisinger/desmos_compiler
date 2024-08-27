@@ -7,6 +7,7 @@ use inkwell::context::Context;
 
 mod codegen;
 mod expressions;
+mod functions;
 mod parser;
 mod value;
 
@@ -19,6 +20,16 @@ fn main() -> Result<()> {
         let line = line?;
         if &line == "compile" {
             codegen.compile_all_exprs();
+
+            let execution_engine = codegen.execution_engine;
+            unsafe {
+                println!(
+                    "{}",
+                    execution_engine
+                        .get_function::<unsafe extern "C" fn(f64) -> f64>("f")?
+                        .call(0.0)
+                );
+            };
             for (_, err) in &expressions.errors {
                 eprintln!("{}", err);
             }
