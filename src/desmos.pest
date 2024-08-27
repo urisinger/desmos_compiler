@@ -1,7 +1,14 @@
-WHITESPACE   =  _{ " " | "\t" | NEWLINE }
+WHITESPACE   =  _{ " " | "\t" | "\\left" | "\\right" | NEWLINE }
   
-program      =  _{ SOI ~ expr ~ EOI }
-    expr     =   { atom ~ (infix ~ atom)* }
+program      =  _{ SOI ~ comparison ~ EOI }
+    comparison = {expr ~ (relop ~ expr)?}
+    relop        =  @{ eq | gt | lt | gte | lte }
+      eq           =  _{ "=" }   // Equal to
+      gt           =  _{ ">" }   // Greater than
+      lt           =  _{ "<" }   // Less than
+      gte          =  _{ ">=" }  // Greater than or equal to
+      lte          =  _{ "<=" }  // Less than or equal to
+    expr     =  { atom ~ (infix ~ atom)* }
     atom     =  _{ prefix? ~ primary ~ postfix?}
     infix    =  _{ add | sub | mul | div | paren }
       add    =   { "+" } // Addition
@@ -9,7 +16,7 @@ program      =  _{ SOI ~ expr ~ EOI }
       mul    =   { "*" } // Multiplication
       div    =   { "/" } // Division
       paren  =   { "" }  // Implicit Multiplication
-    prefix   =  _{ neg| sqrt| sin| cos| tan| csc| sec| cot| invsin| invcos| invtan| invcsc| invsec| invcot }
+    prefix   =  _{ neg | sqrt | sin | cos | tan | csc | sec | cot | invsin | invcos | invtan | invcsc| invsec| invcot }
       neg    =   { "-" } // Negation
       sqrt = {"\\sqrt"}
       sin = {"\\sin"}
@@ -30,9 +37,10 @@ program      =  _{ SOI ~ expr ~ EOI }
     primary  =  _{ lit | fn_call | ident | frac}
       fn_call=   { ident? ~ "(" ~ expr ~ ("," ~ expr)* ~ ")" } // not really function call, just a tuple
       frac   =   { "\\" ~ "frac" ~ "{" ~ expr ~ "}" ~ "{" ~ expr ~ "}" }
-      lit    =  _{float | int}
+      lit    =  _{ float | int }
       float  =  @{ int ~ "." ~ int? ~ exp? | int ~ exp }
       exp    =  _{ ^"e" ~ ("+" | "-")? ~ int }
       int    =  @{ ASCII_DIGIT+ }
       ident  =  @{ASCII_ALPHA ~ ("{" ~ ASCII_ALPHANUMERIC ~ "}")?}
+
 
