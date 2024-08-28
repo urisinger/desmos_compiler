@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use inkwell::values::FunctionValue;
 
-use crate::parser::{ComparisonOp, Expr, Node};
+use crate::lang::parser::{ComparisonOp, Expr, Node};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

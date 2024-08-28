@@ -1,15 +1,12 @@
 use std::io::{self, BufRead, Write};
 
 use anyhow::Result;
-use codegen::{CodeGen, CompiledExpr};
 use expressions::Expressions;
 use inkwell::context::Context;
+use lang::backends::llvm::{CodeGen, CompiledExpr};
 
-mod codegen;
 mod expressions;
-mod functions;
-mod parser;
-mod value;
+mod lang;
 
 fn main() -> Result<()> {
     let context = Context::create();
