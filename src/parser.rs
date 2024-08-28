@@ -80,13 +80,14 @@ impl Expr {
                 scope.insert("x", 0);
                 expr.replace_scope(&scope);
             }
-            Expr::Explicit { lhs, .. } => {
+            Expr::Explicit { lhs, rhs, .. } => {
                 let mut scope = HashMap::with_capacity(1);
                 scope.insert("x", 0);
 
                 scope.insert("y", 1);
 
                 lhs.replace_scope(&scope);
+                rhs.replace_scope(&scope);
             }
             Expr::VarDef { rhs, .. } => rhs.replace_scope(&HashMap::new()),
             Expr::FnDef { args, rhs, .. } => rhs.replace_scope(

@@ -1,7 +1,7 @@
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 
 use anyhow::Result;
-use codegen::CodeGen;
+use codegen::{CodeGen, CompiledExpr};
 use expressions::Expressions;
 use inkwell::context::Context;
 
@@ -15,27 +15,52 @@ fn main() -> Result<()> {
     let context = Context::create();
 
     let mut expressions = Expressions::new();
-    for line in io::stdin().lock().lines() {
-        let mut codegen = CodeGen::new(&context, &mut expressions);
-        let line = line?;
-        if &line == "compile" {
-            codegen.compile_all_exprs();
+    loop {
+        print!("> "); // Prompt the user
+        io::stdout().flush().unwrap(); // Ensure the prompt is displayed immediately
 
-            let execution_engine = codegen.execution_engine;
-            unsafe {
-                println!(
-                    "{}",
-                    execution_engine
-                        .get_function::<unsafe extern "C" fn(f64) -> f64>("f")?
-                        .call(0.0)
-                );
-            };
-            for (_, err) in &expressions.errors {
-                eprintln!("{}", err);
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let line = input.trim();
+
+        if line == "compile" {
+            let codegen = CodeGen::new(&context, &expressions);
+            let compiled = codegen.compile_all_exprs();
+
+            for expr in compiled.compiled {
+                match expr {
+                    CompiledExpr::Explicit { lhs } => {
+                        let name = lhs.get_name().to_str()?;
+                        let function = codegen.get_explicit_fn(name).unwrap();
+
+                        let x = get_user_value();
+                        unsafe { println!("function {name}({x}) returned {}", function.call(x)) };
+                    }
+                    CompiledExpr::Implicit { lhs, op, rhs } => {
+                        let name = lhs.get_name().to_str()?;
+                        let function = codegen.get_implicit_fn(name).unwrap();
+
+                        let x = get_user_value();
+                        let y = get_user_value();
+                        unsafe {
+                            println!("function {name}({x},{y}) returned {}", function.call(x, y))
+                        };
+                    }
+                }
             }
         } else {
-            expressions.add_expr(line);
+            expressions.add_expr(&line.to_string());
         }
     }
-    Ok(())
+}
+
+fn get_user_value() -> f64 {
+    println!("Enter a value: ");
+
+    let mut input_line = String::new();
+    io::stdin()
+        .read_line(&mut input_line)
+        .expect("Failed to read line");
+
+    input_line.trim().parse().expect("Input not an integer")
 }
