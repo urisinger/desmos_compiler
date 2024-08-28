@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::lang::parser::{ComparisonOp, Expr, Node};
+use crate::lang::parser::Expr;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

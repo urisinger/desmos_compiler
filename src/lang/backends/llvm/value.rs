@@ -1,6 +1,6 @@
 use anyhow::bail;
 use inkwell::{
-    types::{BasicMetadataTypeEnum, FloatType},
+    types::BasicMetadataTypeEnum,
     values::{AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue, IntValue},
 };
 
