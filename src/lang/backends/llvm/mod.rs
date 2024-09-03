@@ -7,13 +7,14 @@ use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::intrinsics::Intrinsic;
 use inkwell::module::Module;
 
+use inkwell::types::StructType;
 use inkwell::values::{AnyValue, BasicMetadataValueEnum, BasicValue, FunctionValue};
-use inkwell::OptimizationLevel;
+use inkwell::{AddressSpace, OptimizationLevel};
 
 use crate::expressions::{ExpressionId, Expressions};
 use crate::lang::parser::{BinaryOp, ComparisonOp, Expr, Literal, Node, UnaryOp};
 use functions::IMPORTED_FUNCTIONS;
-use value::{Number, NumberType, Value, ValueType};
+use value::{ArrayType, Number, NumberType, Value, ValueType};
 
 pub mod functions;
 pub mod value;
@@ -42,13 +43,17 @@ pub struct CodeGen<'ctx, 'expr> {
     pub execution_engine: ExecutionEngine<'ctx>,
     pub exprs: &'expr Expressions,
 
+    pub list_type: StructType<'ctx>,
+
     pub imported_functions: HashMap<&'static str, FunctionValue<'ctx>>,
+    pub return_types: HashMap<String, ValueType>,
 }
 
 impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
     pub fn new(context: &'ctx inkwell::context::Context, exprs: &'expr Expressions) -> Self {
         let module = context.create_module("main");
         let builder = context.create_builder();
+
         let execution_engine = module
             .create_jit_execution_engine(OptimizationLevel::None)
             .unwrap();
@@ -87,6 +92,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
             builder,
             exprs,
             execution_engine,
+            return_types: HashMap::new(),
 
             imported_functions,
         }
@@ -146,6 +152,12 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                             ValueType::Number(NumberType::Float)
                         }
                         ValueType::Number(NumberType::Int) => ValueType::Number(NumberType::Int),
+                        ValueType::Array(ArrayType::Number(ty)) => match ty {
+                            NumberType::Float => {
+                                ValueType::Array(ArrayType::Number(NumberType::Float))
+                            }
+                            NumberType::Int => ValueType::Array(ArrayType::Number(NumberType::Int)),
+                        },
                     },
                     _ => unimplemented!(),
                 }
@@ -227,8 +239,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
 
                     self.builder
                         .build_call(function, &args, ident)?
-                        .as_any_value_enum()
-                        .try_into()?
+                        .as_any_value_enum()?
                 }
                 Some(Expr::VarDef { .. }) => {
                     if args.len() == 1 {
@@ -406,106 +417,118 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                 (Number::Float(lhs), Number::Float(rhs)) => {
                     let intrinsic = Intrinsic::find("llvm.pow").unwrap();
 
-                    self.builder
-                        .build_call(
-                            intrinsic
-                                .get_declaration(
-                                    &self.module,
-                                    &[
-                                        self.context.f64_type().into(),
-                                        self.context.f64_type().into(),
-                                    ],
-                                )
-                                .unwrap(),
-                            &[lhs.into(), rhs.into()],
-                            "pow",
-                        )?
-                        .as_any_value_enum()
-                        .try_into()?
+                    Number::from_any_value_enum(
+                        self.builder
+                            .build_call(
+                                intrinsic
+                                    .get_declaration(
+                                        &self.module,
+                                        &[
+                                            self.context.f64_type().into(),
+                                            self.context.f64_type().into(),
+                                        ],
+                                    )
+                                    .unwrap(),
+                                &[lhs.into(), rhs.into()],
+                                "pow",
+                            )?
+                            .as_any_value_enum(),
+                    )
+                    .expect("should be number type")
                 }
                 (Number::Int(lhs), Number::Int(rhs)) => {
                     let intrinsic = Intrinsic::find("llvm.powi").unwrap();
 
-                    self.builder
-                        .build_call(
-                            intrinsic
-                                .get_declaration(
-                                    &self.module,
-                                    &[
-                                        self.context.f64_type().into(),
-                                        self.context.i64_type().into(),
-                                    ],
-                                )
-                                .unwrap(),
-                            &[
-                                self.builder
-                                    .build_signed_int_to_float(
-                                        lhs,
-                                        self.context.f64_type(),
-                                        "int_to_float",
-                                    )?
-                                    .into(),
-                                rhs.into(),
-                            ],
-                            "pow",
-                        )?
-                        .as_any_value_enum()
-                        .try_into()?
+                    Number::from_any_value_enum(
+                        self.builder
+                            .build_call(
+                                intrinsic
+                                    .get_declaration(
+                                        &self.module,
+                                        &[
+                                            self.context.f64_type().into(),
+                                            self.context.i64_type().into(),
+                                        ],
+                                    )
+                                    .unwrap(),
+                                &[
+                                    self.builder
+                                        .build_signed_int_to_float(
+                                            lhs,
+                                            self.context.f64_type(),
+                                            "int_to_float",
+                                        )?
+                                        .into(),
+                                    rhs.into(),
+                                ],
+                                "pow",
+                            )?
+                            .as_any_value_enum(),
+                    )
+                    .expect("should be number type")
                 }
                 (Number::Int(lhs), Number::Float(rhs)) => {
                     let intrinsic = Intrinsic::find("llvm.pow").unwrap();
 
-                    self.builder
-                        .build_call(
-                            intrinsic
-                                .get_declaration(
-                                    &self.module,
-                                    &[
-                                        self.context.f64_type().into(),
-                                        self.context.f64_type().into(),
-                                    ],
-                                )
-                                .unwrap(),
-                            &[
-                                self.builder
-                                    .build_signed_int_to_float(
-                                        lhs,
-                                        self.context.f64_type(),
-                                        "int_to_float",
-                                    )?
-                                    .into(),
-                                rhs.into(),
-                            ],
-                            "pow",
-                        )?
-                        .as_any_value_enum()
-                        .try_into()?
+                    Number::from_any_value_enum(
+                        self.builder
+                            .build_call(
+                                intrinsic
+                                    .get_declaration(
+                                        &self.module,
+                                        &[
+                                            self.context.f64_type().into(),
+                                            self.context.f64_type().into(),
+                                        ],
+                                    )
+                                    .unwrap(),
+                                &[
+                                    self.builder
+                                        .build_signed_int_to_float(
+                                            lhs,
+                                            self.context.f64_type(),
+                                            "int_to_float",
+                                        )?
+                                        .into(),
+                                    rhs.into(),
+                                ],
+                                "pow",
+                            )?
+                            .as_any_value_enum(),
+                    )
+                    .expect("should be number type")
                 }
                 (Number::Float(lhs), Number::Int(rhs)) => {
                     let intrinsic = Intrinsic::find("llvm.powi").unwrap();
 
-                    self.builder
-                        .build_call(
-                            intrinsic
-                                .get_declaration(
-                                    &self.module,
-                                    &[
-                                        self.context.f64_type().into(),
-                                        self.context.i64_type().into(),
-                                    ],
-                                )
-                                .unwrap(),
-                            &[lhs.into(), rhs.into()],
-                            "pow",
-                        )?
-                        .as_any_value_enum()
-                        .try_into()?
+                    Number::from_any_value_enum(
+                        self.builder
+                            .build_call(
+                                intrinsic
+                                    .get_declaration(
+                                        &self.module,
+                                        &[
+                                            self.context.f64_type().into(),
+                                            self.context.i64_type().into(),
+                                        ],
+                                    )
+                                    .unwrap(),
+                                &[lhs.into(), rhs.into()],
+                                "pow",
+                            )?
+                            .as_any_value_enum(),
+                    )
+                    .expect("should be number type")
                 }
             },
         })
     }
 
-    pub fn get_fn(&self, name: &str, types: &[ValueType]) -> Result<FunctionValue<'ctx>> {
+    pub fn get_fn(
+        &mut self,
+        name: &str,
+        types: &[ValueType],
+    ) -> Result<(FunctionValue<'ctx>, ValueType)> {
         let len = types.iter().map(|t| t.name().len() + 1).sum::<usize>() + name.len();
 
         let mut specialized_name = String::with_capacity(len);
@@ -515,15 +538,17 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
             specialized_name.push('_');
             specialized_name.push_str(t.name());
         }
+
         match self.module.get_function(&specialized_name) {
-            Some(function) => Ok(function),
+            Some(function) => Ok((function, self.return_types[name])),
             None => match self.exprs.get_expr(name) {
                 Some(Expr::FnDef { rhs, .. }) => {
                     let block = self.builder.get_insert_block();
                     let function = self.compile_fn(&specialized_name, &rhs, types);
 
                     block.map(|b| self.builder.position_at_end(b));
-                    function
+
+                    Ok((function?, self.return_types[name]))
                 }
                 None => bail!("no exprssion found for function {name}"),
                 _ => unreachable!("this indicates a bug"),
@@ -556,7 +581,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
     }
 
     pub fn compile_fn(
-        &self,
+        &mut self,
         name: &str,
         node: &Node,
         args: &[ValueType],
@@ -566,24 +591,33 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
         let ret_type = self.return_type(node, args)?;
 
         let fn_type = match ret_type {
+            ValueType::Array(ArrayType::Number) => self
+                .context
+                .ptr_type(AddressSpace::default())
+                .fn_type(&types, false),
             ValueType::Number(NumberType::Float) => self.context.f64_type().fn_type(&types, false),
             ValueType::Number(NumberType::Int) => self.context.i64_type().fn_type(&types, false),
         };
         let function = self.module.add_function(name, fn_type, None);
         let args = (0..args.len())
             .map(|i| {
-                function
-                    .get_nth_param(i as u32)
-                    .expect("should not happen")
-                    .as_any_value_enum()
-                    .try_into()
+                Value::from_any_value_enum(
+                    function
+                        .get_nth_param(i as u32)
+                        .expect("should not happen")
+                        .as_any_value_enum(),
+                    args[i],
+                )
+                .unwrap()
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
 
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
         let value = self.codegen_expr(node, &args, &entry)?;
+
+        self.return_types.insert(name.to_owned(), value.get_type());
         self.builder
             .build_return(Some(&value.as_basic_value_enum()))?;
 
@@ -591,7 +625,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
     }
 
     pub fn compile_expr(
-        &self,
+        &mut self,
         id: ExpressionId,
         expr: &Expr,
         compiled_exprs: &mut Vec<CompiledExpr<'ctx>>,

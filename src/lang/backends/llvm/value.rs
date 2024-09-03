@@ -1,7 +1,10 @@
 use anyhow::bail;
 use inkwell::{
-    types::BasicMetadataTypeEnum,
-    values::{AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue, IntValue},
+    types::{BasicMetadataTypeEnum, BasicType},
+    values::{
+        AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue, IntValue, PointerValue,
+    },
+    AddressSpace,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -56,6 +59,14 @@ impl<'ctx> Number<'ctx> {
             Self::Int(_) => NumberType::Int,
         }
     }
+
+    pub fn from_any_value_enum(value: AnyValueEnum<'ctx>) -> Option<Self> {
+        match value {
+            AnyValueEnum::FloatValue(value) => Some(Self::Float(value)),
+            AnyValueEnum::IntValue(value) => Some(Self::Int(value)),
+            _ => None,
+        }
+    }
 }
 
 impl<'ctx> From<FloatValue<'ctx>> for Number<'ctx> {
@@ -70,37 +81,58 @@ impl<'ctx> From<IntValue<'ctx>> for Number<'ctx> {
     }
 }
 
-impl<'ctx> TryFrom<AnyValueEnum<'ctx>> for Number<'ctx> {
-    type Error = anyhow::Error;
-    fn try_from(value: AnyValueEnum<'ctx>) -> Result<Self, Self::Error> {
-        match value {
-            AnyValueEnum::FloatValue(value) => Ok(Self::Float(value)),
-            AnyValueEnum::IntValue(value) => Ok(Self::Int(value)),
-            val => bail!("expected float or int value, found {}", val.get_type()),
+#[derive(Debug, Clone, Copy)]
+pub enum Array<'ctx> {
+    Number(PointerValue<'ctx>),
+}
+
+impl<'ctx> Array<'ctx> {
+    pub fn as_basic_value_enum(self) -> BasicValueEnum<'ctx> {
+        match self {
+            Self::Number(value) => value.as_basic_value_enum(),
+        }
+    }
+
+    pub fn as_any_value_enum(self) -> AnyValueEnum<'ctx> {
+        match self {
+            Self::Number(value) => value.as_any_value_enum(),
+        }
+    }
+
+    pub fn get_type(&self) -> ArrayType {
+        match self {
+            Self::Number(_) => ArrayType::Number,
+        }
+    }
+
+    pub fn from_pointer_value(value: PointerValue<'ctx>, ty: ArrayType) -> Self {
+        match ty {
+            ArrayType::Number => Array::Number(value),
         }
     }
 }
 
-impl<'ctx> Into<BasicValueEnum<'ctx>> for Number<'ctx> {
-    fn into(self) -> BasicValueEnum<'ctx> {
-        self.as_basic_value_enum()
-    }
+#[derive(Debug, Clone, Copy)]
+pub enum ArrayType {
+    Number,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Value<'ctx> {
     Number(Number<'ctx>),
+    Array(Array<'ctx>),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum ValueType {
     Number(NumberType),
+    Array(ArrayType),
 }
 
 impl ValueType {
     pub fn name(&self) -> &'static str {
         match self {
-            ValueType::Number(num_type) => num_type.name(),
+            Self::Number(num_type) => num_type.name(),
         }
     }
 
@@ -110,6 +142,17 @@ impl ValueType {
     ) -> BasicMetadataTypeEnum<'ctx> {
         match self {
             Self::Number(number) => number.metadata(context),
+            Self::Array(_) => BasicMetadataTypeEnum::StructType(
+                context.struct_type(
+                    &[
+                        context
+                            .ptr_type(AddressSpace::default())
+                            .as_basic_type_enum(),
+                        context.i64_type().as_basic_type_enum(),
+                    ],
+                    false,
+                ),
+            ),
         }
     }
 }
@@ -118,18 +161,36 @@ impl<'ctx> Value<'ctx> {
     pub fn as_basic_value_enum(self) -> BasicValueEnum<'ctx> {
         match self {
             Value::Number(number) => number.as_basic_value_enum(),
+
+            Value::Array(arr) => arr.as_basic_value_enum(),
         }
     }
 
     pub fn as_any_value_enum(self) -> AnyValueEnum<'ctx> {
         match self {
             Value::Number(number) => number.as_any_value_enum(),
+            Value::Array(arr) => arr.as_any_value_enum(),
         }
     }
 
     pub fn get_type(&self) -> ValueType {
         match self {
             Value::Number(number) => ValueType::Number(number.get_type()),
+
+            Value::Array(arr) => ValueType::Array(arr.get_type()),
+        }
+    }
+
+    pub fn from_any_value_enum(value: AnyValueEnum<'ctx>, ty: ValueType) -> Option<Self> {
+        match ty {
+            ValueType::Number(_) => Number::from_any_value_enum(value).map(|n| Value::Number(n)),
+            ValueType::Array(arr) => {
+                if let AnyValueEnum::PointerValue(value) = value {
+                    Some(Value::Array(Array::from_pointer_value(value, arr)))
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -143,16 +204,5 @@ impl<'ctx> From<FloatValue<'ctx>> for Value<'ctx> {
 impl<'ctx> From<IntValue<'ctx>> for Value<'ctx> {
     fn from(value: IntValue<'ctx>) -> Self {
         Self::Number(Number::Int(value))
-    }
-}
-
-impl<'ctx> TryFrom<AnyValueEnum<'ctx>> for Value<'ctx> {
-    type Error = anyhow::Error;
-    fn try_from(value: AnyValueEnum<'ctx>) -> Result<Self, Self::Error> {
-        match value {
-            AnyValueEnum::FloatValue(value) => Ok(Self::Number(Number::Float(value))),
-            AnyValueEnum::IntValue(value) => Ok(Self::Number(Number::Int(value))),
-            val => bail!("expected float or int value, found {}", val.get_type()),
-        }
     }
 }
