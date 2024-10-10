@@ -43,9 +43,11 @@ impl Expressions {
         }
     }
 
-    pub fn add_expr(&mut self, s: &str) {
+    #[allow(unused_must_use)]
+    pub fn add_expr(&mut self, s: &str) -> ExpressionId {
         self.set_expr(self.max_id, s);
         self.max_id += 1;
+        (self.max_id - 1).into()
     }
 
     pub fn set_expr(&mut self, id: impl Into<ExpressionId>, s: &str) {

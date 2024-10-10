@@ -21,7 +21,10 @@ fn main() -> Result<()> {
         let line = input.trim();
 
         if line == "compile" {
-            let codegen = CodeGen::new(&context, &expressions);
+            for (id, err) in &expressions.errors {
+                println!("err: {err}");
+            }
+            let mut codegen = CodeGen::new(&context, &expressions);
             let compiled = codegen.compile_all_exprs();
 
             for expr in compiled.compiled {
