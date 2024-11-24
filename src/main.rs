@@ -3,7 +3,12 @@ use std::io::{self, BufRead, Write};
 use anyhow::Result;
 use expressions::Expressions;
 use inkwell::context::Context;
-use lang::backends::llvm::{CodeGen, CompiledExpr};
+use lang::backends::llvm::{jit::ListLayout, CompiledExpr};
+
+use crate::lang::backends::llvm::{
+    codegen::CodeGen,
+    jit::{ExplicitJitFn, ExplicitJitListFn, ImplicitJitFn, ImplicitJitListFn},
+};
 
 mod expressions;
 mod lang;
@@ -21,7 +26,7 @@ fn main() -> Result<()> {
         let line = input.trim();
 
         if line == "compile" {
-            for (id, err) in &expressions.errors {
+            for (_, err) in &expressions.errors {
                 println!("err: {err}");
             }
             let mut codegen = CodeGen::new(&context, &expressions);
@@ -30,20 +35,50 @@ fn main() -> Result<()> {
             for expr in compiled.compiled {
                 match expr {
                     CompiledExpr::Explicit { lhs } => {
-                        let name = lhs.get_name().to_str()?;
-                        let function = codegen.get_explicit_fn(name).unwrap();
-
                         let x = get_user_value();
-                        unsafe { println!("function {name}({x}) returned {}", function.call(x)) };
+
+                        match lhs {
+                            ExplicitJitFn::Number(lhs) => {
+                                println!("call to explicit with {x} returned {}", unsafe {
+                                    lhs.call(x)
+                                });
+                            }
+                            ExplicitJitFn::List(lhs) => match lhs {
+                                ExplicitJitListFn::Number(lhs) => {
+                                    let result = unsafe { lhs.call(x) };
+                                    unsafe { print_list("explicit", result) };
+                                }
+                            },
+                        }
                     }
                     CompiledExpr::Implicit { lhs, op, rhs } => {
-                        let name = lhs.get_name().to_str()?;
-                        let function = codegen.get_implicit_fn(name).unwrap();
-
+                        println!("got implicit");
                         let x = get_user_value();
                         let y = get_user_value();
-                        unsafe {
-                            println!("function {name}({x},{y}) returned {}", function.call(x, y))
+                        print!("call to implicit with {x},{y} returned ");
+
+                        match lhs {
+                            ImplicitJitFn::Number(lhs) => {
+                                println!("({}", unsafe { lhs.call(x, y) });
+                            }
+                            ImplicitJitFn::List(lhs) => match lhs {
+                                ImplicitJitListFn::Number(lhs) => {
+                                    let result = unsafe { lhs.call(x, y) };
+                                    unsafe { print_list("implicit lhs", result) };
+                                }
+                            },
+                        };
+
+                        match rhs {
+                            ImplicitJitFn::Number(rhs) => {
+                                println!("{})", unsafe { rhs.call(x, y) });
+                            }
+                            ImplicitJitFn::List(rhs) => match rhs {
+                                ImplicitJitListFn::Number(rhs) => {
+                                    let result = unsafe { rhs.call(x, y) };
+                                    unsafe { print_list("implicit rhs", result) };
+                                }
+                            },
                         };
                     }
                 }
@@ -52,6 +87,26 @@ fn main() -> Result<()> {
             expressions.add_expr(&line.to_string());
         }
     }
+}
+
+unsafe fn print_list(context: &str, list: ListLayout) {
+    if list.size == 0 {
+        println!("{context} list is empty.");
+        return;
+    }
+
+    let ptr = list.ptr as *const f64; // Interpret the pointer as f64 pointer
+    let size = list.size as usize;
+
+    print!("{context} list: [");
+    for i in 0..size {
+        if i > 0 {
+            print!(", ");
+        }
+        let value = *ptr.add(i); // Dereference the pointer with an offset
+        print!("{value}");
+    }
+    println!("]");
 }
 
 fn get_user_value() -> f64 {

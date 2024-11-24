@@ -42,12 +42,12 @@ lazy_static! {
 
 #[derive(Debug)]
 pub enum Expr {
-    Explicit {
+    Implicit {
         lhs: Node,
         op: ComparisonOp,
         rhs: Node,
     },
-    Implicit {
+    Explicit {
         expr: Node,
     },
     VarDef {
@@ -74,12 +74,12 @@ impl Expr {
 
     fn replace_scope(&mut self) {
         match self {
-            Expr::Implicit { expr } => {
+            Expr::Explicit { expr } => {
                 let mut scope = HashMap::with_capacity(1);
                 scope.insert("x", 0);
                 expr.replace_scope(&scope);
             }
-            Expr::Explicit { lhs, rhs, .. } => {
+            Expr::Implicit { lhs, rhs, .. } => {
                 let mut scope = HashMap::with_capacity(1);
                 scope.insert("x", 0);
 
@@ -102,7 +102,17 @@ impl Expr {
     fn decide_expr_type(node: Node) -> Self {
         if let Node::Comp { lhs, op, rhs } = node {
             match *lhs {
-                Node::Ident(ident) => Expr::VarDef { ident, rhs: *rhs },
+                Node::Ident(ident) => {
+                    if ident == "x" || ident == "y" {
+                        Self::Implicit {
+                            lhs: Node::Ident(ident),
+                            op,
+                            rhs: *rhs,
+                        }
+                    } else {
+                        Expr::VarDef { ident, rhs: *rhs }
+                    }
+                }
                 Node::FnCall { ident, args }
                     if args.iter().all(|node| {
                         if let Node::Ident(_) = node.deref() {
@@ -129,14 +139,14 @@ impl Expr {
                         rhs: *rhs,
                     }
                 }
-                _ => Self::Explicit {
+                _ => Self::Implicit {
                     lhs: *lhs,
                     op,
                     rhs: *rhs,
                 },
             }
         } else {
-            Self::Implicit { expr: node }
+            Self::Explicit { expr: node }
         }
     }
 }
@@ -216,8 +226,8 @@ pub enum ComparisonOp {
 
 #[derive(Debug)]
 pub enum Literal {
-    Int(u64),
     Float(f64),
+    List(Vec<Node>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -252,7 +262,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Node> {
     PRATT_PARSER
         .map_primary(|primary| {
             Ok(match primary.as_rule() {
-                Rule::int => Node::Lit(Literal::Int(primary.as_str().parse::<u64>()?)),
+                Rule::int => Node::Lit(Literal::Float(primary.as_str().parse::<u64>()? as f64)),
                 Rule::ident => {
                     let name = primary.as_str().to_string();
 
@@ -286,6 +296,12 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Node> {
                         }
                     }
                 }
+                Rule::list => Node::Lit(Literal::List(
+                    primary
+                        .into_inner()
+                        .map(|pair| parse_expr(pair.into_inner()))
+                        .collect::<Result<Vec<_>>>()?,
+                )),
                 Rule::float => Node::Lit(Literal::Float(primary.as_str().parse::<f64>()?)),
                 Rule::frac => {
                     let mut pairs = primary.into_inner();
