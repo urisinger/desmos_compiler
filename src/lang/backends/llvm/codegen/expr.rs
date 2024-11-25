@@ -75,6 +75,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                     .module
                     .get_function("malloc")
                     .expect("malloc should exist");
+
                 let total_size =
                     self.builder
                         .build_int_mul(size, int_type.const_int(8, false), "total_size")?;
@@ -88,6 +89,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
 
                 for (i, element) in elements.iter().enumerate() {
                     let value = self.codegen_expr(element, call_args)?;
+
                     let float_value = match value {
                         Value::Number(v) => v,
                         _ => bail!("List elements must be numbers"),

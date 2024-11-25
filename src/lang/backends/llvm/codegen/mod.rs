@@ -187,7 +187,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                         .ptr_type(AddressSpace::default())
                         .as_basic_type_enum(),
                 ],
-                true,
+                false,
             ),
         }
     }
@@ -208,7 +208,13 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
         }
 
         match self.module.get_function(&specialized_name) {
-            Some(function) => Ok((function, self.return_types[name])),
+            Some(function) => Ok((
+                function,
+                *self
+                    .return_types
+                    .get(&specialized_name)
+                    .expect("compile_fn should have inserted return type"),
+            )),
             None => match self.exprs.get_expr(name) {
                 Some(Expr::FnDef { rhs, .. }) => {
                     let block = self.builder.get_insert_block();
@@ -218,7 +224,11 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                         self.builder.position_at_end(b)
                     }
 
-                    Ok((function?, self.return_types[name]))
+                    let return_type = self
+                        .return_types
+                        .get(&specialized_name)
+                        .expect("compile_fn should have inserted return type");
+                    Ok((function?, *return_type))
                 }
                 None => bail!("no exprssion found for function {name}"),
                 _ => unreachable!("this indicates a bug"),
@@ -273,12 +283,10 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
         self.return_types.insert(name.to_owned(), ret_type);
 
         let fn_type = match ret_type {
-            ValueType::List(ListType::Number) => self
-                .context
-                .ptr_type(AddressSpace::default())
-                .fn_type(&types, false),
+            ValueType::List(ListType::Number) => self.list_type.fn_type(&types, false),
             ValueType::Number => self.context.f64_type().fn_type(&types, false),
         };
+
         let function = self.module.add_function(name, fn_type, None);
         let args = (0..args.len())
             .map(|i| {
@@ -298,13 +306,6 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
         self.builder
             .build_return(Some(&value.as_basic_value_enum()))?;
 
-        println!(
-            "module functions: {:?}",
-            self.module
-                .get_functions()
-                .map(|a| a.get_name().to_str().unwrap().to_string())
-                .collect::<Vec<_>>()
-        );
         Ok(function)
     }
 }

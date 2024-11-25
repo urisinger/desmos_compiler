@@ -3,7 +3,7 @@ use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 
 use super::types::{ListType, ValueType};
 
-#[repr(packed)]
+#[repr(C)]
 pub struct ListLayout {
     pub size: i64,
     pub ptr: *mut u8,

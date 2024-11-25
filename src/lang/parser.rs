@@ -39,7 +39,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Implicit {
         lhs: Node,
@@ -144,7 +144,7 @@ impl Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Lit(Literal),
     Ident(String),
@@ -177,7 +177,12 @@ impl Node {
     pub fn replace_scope(&mut self, scope: &HashMap<&str, usize>) {
         match self {
             Node::FnArg { .. } => {}
-            Node::Lit(_) => {}
+            Node::Lit(Literal::Float(_)) => {}
+            Node::Lit(Literal::List(nodes)) => {
+                for node in nodes {
+                    node.replace_scope(scope);
+                }
+            }
             Node::Ident(ident) => {
                 if let Some(id) = scope.get(ident.as_str()) {
                     *self = Node::FnArg { index: *id }
@@ -208,7 +213,7 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ComparisonOp {
     Eq,
     Gt,
@@ -217,13 +222,13 @@ pub enum ComparisonOp {
     Lte,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Float(f64),
     List(Vec<Node>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -232,7 +237,7 @@ pub enum BinaryOp {
     Pow,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOp {
     Neg,
     Sqrt,
@@ -392,4 +397,136 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Node> {
             })
         })
         .parse(pairs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! generate_tests {
+    ( $( $name:ident: $input:expr => $expected:expr ),* $(,)? ) => {
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+
+            $(
+                #[test]
+                fn $name() {
+                    let input = $input;
+                    let parsed = Expr::parse(input).expect("Parsing failed");
+                    assert_eq!(parsed, $expected);
+                }
+            )*
+        }
+    };
+}
+
+    generate_tests! {
+        test_literal_float: "42.0" => Expr::Explicit {
+            expr: Node::Lit(Literal::Float(42.0))
+        },
+        test_literal_integer_as_float: "42" => Expr::Explicit {
+            expr: Node::Lit(Literal::Float(42.0))
+        },
+        test_variable_definition: "a = 10" => Expr::VarDef {
+            ident: "a".to_string(),
+            rhs: Node::Lit(Literal::Float(10.0)),
+        },
+        test_simple_addition: "3 + 4" => Expr::Explicit {
+            expr: Node::BinOp {
+                lhs: Box::new(Node::Lit(Literal::Float(3.0))),
+                op: BinaryOp::Add,
+                rhs: Box::new(Node::Lit(Literal::Float(4.0))),
+            }
+        },
+        test_nested_expression: "(1 + 2) * 3" => Expr::Explicit {
+            expr: Node::BinOp {
+                lhs: Box::new(Node::BinOp {
+                    lhs: Box::new(Node::Lit(Literal::Float(1.0))),
+                    op: BinaryOp::Add,
+                    rhs: Box::new(Node::Lit(Literal::Float(2.0))),
+                }),
+                op: BinaryOp::Mul,
+                rhs: Box::new(Node::Lit(Literal::Float(3.0))),
+            }
+        },
+        test_function_call: "\\sin(0)" => Expr::Explicit {
+            expr: Node::UnaryOp {
+                op: UnaryOp::Sin,
+                val: Box::new(Node::Lit(Literal::Float(0.0)))
+            }
+        },
+        test_implicit_relation: "x > 5" => Expr::Implicit {
+            lhs: Node::FnArg{index: 0},
+            op: ComparisonOp::Gt,
+            rhs: Node::Lit(Literal::Float(5.0)),
+        },
+        test_complex_implicit_relation: "x + y = 10" => Expr::Implicit {
+            lhs: Node::BinOp {
+                lhs: Box::new(Node::FnArg{index: 0}),
+                op: BinaryOp::Add,
+                rhs: Box::new(Node::FnArg{index: 1}),
+            },
+            op: ComparisonOp::Eq,
+            rhs: Node::Lit(Literal::Float(10.0)),
+        },
+        test_function_definition: "g(a, b) = a * b" => Expr::FnDef {
+            ident: "g".to_string(),
+            args: vec!["a".to_string(), "b".to_string()],
+            rhs: Node::BinOp {
+                lhs: Box::new(Node::FnArg { index: 0 }),
+                op: BinaryOp::Mul,
+                rhs: Box::new(Node::FnArg { index: 1 }),
+            }
+        },
+        test_tuple: "(1, 2, 3)" => Expr::Explicit {
+            expr: Node::Tuple {
+                args: vec![
+                    Node::Lit(Literal::Float(1.0)),
+                    Node::Lit(Literal::Float(2.0)),
+                    Node::Lit(Literal::Float(3.0)),
+                ]
+            }
+        },
+        test_fraction: "1 / 2" => Expr::Explicit {
+            expr: Node::BinOp {
+                lhs: Box::new(Node::Lit(Literal::Float(1.0))),
+                op: BinaryOp::Div,
+                rhs: Box::new(Node::Lit(Literal::Float(2.0))),
+            }
+        },
+        test_exponentiation: "2 ^ {3}" => Expr::Explicit {
+            expr: Node::BinOp {
+                lhs: Box::new(Node::Lit(Literal::Float(2.0))),
+                op: BinaryOp::Pow,
+                rhs: Box::new(Node::Lit(Literal::Float(3.0))),
+            }
+        },
+        test_unary_negation: "-5" => Expr::Explicit {
+            expr: Node::UnaryOp {
+                val: Box::new(Node::Lit(Literal::Float(5.0))),
+                op: UnaryOp::Neg,
+            }
+        },
+        test_unary_function: "\\sqrt(9)" => Expr::Explicit {
+            expr: Node::UnaryOp  {
+                op: UnaryOp::Sqrt,
+                val: Box::new(Node::Lit(Literal::Float(9.0)))
+            }
+        },
+        test_complex_nested_expression: "\\sqrt((3 + 4) * 2)" => Expr::Explicit {
+            expr: Node::UnaryOp {
+                op: UnaryOp::Sqrt,
+                val: Box::new(Node::BinOp {
+                    lhs: Box::new(Node::BinOp {
+                        lhs: Box::new(Node::Lit(Literal::Float(3.0))),
+                        op: BinaryOp::Add,
+                        rhs: Box::new(Node::Lit(Literal::Float(4.0))),
+                    }),
+                    op: BinaryOp::Mul,
+                    rhs: Box::new(Node::Lit(Literal::Float(2.0))),
+                })
+            }
+        }
+    }
 }

@@ -1,7 +1,6 @@
 use inkwell::values::{
-        AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue,
-        StructValue,
-    };
+    AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue, StructValue,
+};
 
 use super::types::{ListType, ValueType};
 
@@ -25,7 +24,12 @@ impl<'ctx> List<'ctx> {
 
     pub fn from_basic_value_enum(value: BasicValueEnum<'ctx>, ty: ListType) -> Option<Self> {
         match ty {
-            ListType::Number => Some(List::Number(value.try_into().ok()?)),
+            ListType::Number => Some(List::Number(
+                value
+                    .try_into()
+                    .inspect_err(|e| eprintln!("{value:?}"))
+                    .ok()?,
+            )),
         }
     }
 
