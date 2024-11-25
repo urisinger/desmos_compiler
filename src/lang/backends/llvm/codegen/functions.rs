@@ -2,7 +2,7 @@ use std::alloc::{alloc, dealloc, Layout};
 
 use crate::lang::backends::llvm::types::ValueType;
 
-pub const IMPORTED_FUNCTIONS: [(&'static str, ValueType, &[ValueType], *const ()); 0] = [];
+pub const IMPORTED_FUNCTIONS: [(&str, ValueType, &[ValueType], *const ()); 0] = [];
 
 /// Allocate memory for `size` bytes and return a pointer to the allocated memory.
 pub fn malloc(size: usize) -> *mut u8 {

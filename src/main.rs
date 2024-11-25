@@ -81,7 +81,7 @@ fn main() -> Result<()> {
                 }
             }
         } else {
-            _ = expressions.add_expr(&line.to_string()).inspect_err(|err| {
+            _ = expressions.add_expr(line).inspect_err(|err| {
                 println!("err: {err}");
             });
         }

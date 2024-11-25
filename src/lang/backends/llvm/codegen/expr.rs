@@ -25,7 +25,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                     .get_expr(ident)
                     .context(format!("failed to get expr for ident, {}", ident))?
                 {
-                    Expr::VarDef { rhs, .. } => self.return_type(&rhs, call_types)?,
+                    Expr::VarDef { rhs, .. } => self.return_type(rhs, call_types)?,
                     expr => bail!("expr has wrong type, this should not happend, {expr:?}"),
                 }
             }
@@ -48,9 +48,9 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                         })
                         .collect::<Result<Vec<_>>>()?;
 
-                    self.return_type(&rhs, &call_types)?
+                    self.return_type(rhs, &call_types)?
                 }
-                Some(Expr::VarDef { rhs, .. }) => self.return_type(&rhs, call_types)?,
+                Some(Expr::VarDef { rhs, .. }) => self.return_type(rhs, call_types)?,
                 None => bail!("unknown ident {ident}"),
                 _ => bail!("expr has the wrong type"),
             },

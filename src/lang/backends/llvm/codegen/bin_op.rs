@@ -9,7 +9,7 @@ use crate::lang::{backends::llvm::value::Value, parser::BinaryOp};
 use super::CodeGen;
 
 impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
-    pub fn codegen_binary_op<'a>(
+    pub fn codegen_binary_op(
         &self,
         lhs: Value<'ctx>,
         op: BinaryOp,
@@ -35,10 +35,10 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
         rhs: FloatValue<'ctx>,
     ) -> Result<FloatValue<'ctx>> {
         Ok(match op {
-            BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "add")?.into(),
-            BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "sub")?.into(),
-            BinaryOp::Mul => self.builder.build_float_mul(lhs, rhs, "mul")?.into(),
-            BinaryOp::Div => self.builder.build_float_div(lhs, rhs, "div")?.into(),
+            BinaryOp::Add => self.builder.build_float_add(lhs, rhs, "add")?,
+            BinaryOp::Sub => self.builder.build_float_sub(lhs, rhs, "sub")?,
+            BinaryOp::Mul => self.builder.build_float_mul(lhs, rhs, "mul")?,
+            BinaryOp::Div => self.builder.build_float_div(lhs, rhs, "div")?,
             BinaryOp::Pow => {
                 let intrinsic = Intrinsic::find("llvm.pow").unwrap();
 

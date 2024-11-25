@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::iter;
-use std::ops::Deref;
 
 use anyhow::Result;
 use lazy_static::lazy_static;
@@ -114,18 +113,12 @@ impl Expr {
                     }
                 }
                 Node::FnCall { ident, args }
-                    if args.iter().all(|node| {
-                        if let Node::Ident(_) = node.deref() {
-                            true
-                        } else {
-                            false
-                        }
-                    }) =>
+                    if args.iter().all(|node| matches!(node, Node::Ident(_))) =>
                 {
                     let args = args
                         .into_iter()
                         .map(|node| {
-                            if let Node::Ident(ident) = *node {
+                            if let Node::Ident(ident) = node {
                                 ident
                             } else {
                                 unreachable!("should have been verified before")
@@ -166,10 +159,10 @@ pub enum Node {
     },
     FnCall {
         ident: String,
-        args: Vec<Box<Node>>,
+        args: Vec<Node>,
     },
     Tuple {
-        args: Vec<Box<Node>>,
+        args: Vec<Node>,
     },
     Comp {
         lhs: Box<Node>,
@@ -276,7 +269,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Node> {
                     match func_name.as_rule() {
                         Rule::ident => {
                             let args = pairs
-                                .map(|expr| parse_expr(expr.into_inner()).map(Box::new))
+                                .map(|expr| parse_expr(expr.into_inner()))
                                 .collect::<Result<Vec<_>>>()?;
                             let ident = func_name.as_str().to_string();
 
@@ -288,7 +281,7 @@ fn parse_expr(pairs: Pairs<Rule>) -> Result<Node> {
                             } else {
                                 let args = iter::once(func_name)
                                     .chain(pairs)
-                                    .map(|expr| parse_expr(expr.into_inner()).map(Box::new))
+                                    .map(|expr| parse_expr(expr.into_inner()))
                                     .collect::<Result<Vec<_>>>()?;
 
                                 Node::Tuple { args }

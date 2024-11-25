@@ -31,13 +31,9 @@ impl Expressions {
 
     pub fn remove_expr(&mut self, id: impl Into<ExpressionId>) {
         let k = id.into();
-        if let Some(expr) = self.exprs.remove(&k) {
-            match &expr {
-                Expr::VarDef { ident, .. } | Expr::FnDef { ident, .. } => {
-                    self.idents.remove(ident);
-                }
-                _ => (),
-            };
+        if let Some(Expr::VarDef { ident, .. } | Expr::FnDef { ident, .. }) = self.exprs.remove(&k)
+        {
+            self.idents.remove(&ident);
         }
     }
 
@@ -64,7 +60,7 @@ impl Expressions {
     }
 
     fn parse_expr(&mut self, s: &str, k: ExpressionId) -> Result<Expr> {
-        let expr = Expr::parse(&s)?;
+        let expr = Expr::parse(s)?;
         match &expr {
             Expr::VarDef { ident, .. } | Expr::FnDef { ident, .. } => {
                 self.idents.insert(ident.clone(), k);

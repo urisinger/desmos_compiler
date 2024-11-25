@@ -73,7 +73,7 @@ impl<'ctx> Value<'ctx> {
                 _ => None,
             },
             ValueType::List(arr_type) => {
-                List::from_basic_value_enum(value, arr_type).map(|arr| Value::List(arr))
+                List::from_basic_value_enum(value, arr_type).map(Value::List)
             }
         }
     }

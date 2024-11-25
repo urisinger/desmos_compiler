@@ -206,9 +206,9 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
             None => match self.exprs.get_expr(name) {
                 Some(Expr::FnDef { rhs, .. }) => {
                     let block = self.builder.get_insert_block();
-                    let function = self.compile_fn(&specialized_name, &rhs, types);
+                    let function = self.compile_fn(&specialized_name, rhs, types);
 
-                    block.map(|b| self.builder.position_at_end(b));
+                    if let Some(b) = block { self.builder.position_at_end(b) }
 
                     Ok((function?, self.return_types[name]))
                 }
@@ -231,9 +231,9 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
             None => match self.exprs.get_expr(name) {
                 Some(Expr::VarDef { rhs, .. }) => {
                     let block = self.builder.get_insert_block();
-                    let compute_global = self.compile_fn(&name, &rhs, &[])?;
+                    let compute_global = self.compile_fn(name, rhs, &[])?;
 
-                    block.map(|b| self.builder.position_at_end(b));
+                    if let Some(b) = block { self.builder.position_at_end(b) }
 
                     Value::from_basic_value_enum(
                         self.builder
@@ -256,7 +256,7 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
         node: &Node,
         args: &[ValueType],
     ) -> Result<FunctionValue<'ctx>> {
-        let types: Vec<_> = args.iter().map(|t| t.metadata(&self.context)).collect();
+        let types: Vec<_> = args.iter().map(|t| t.metadata(self.context)).collect();
 
         let ret_type = self.return_type(node, args)?;
 
