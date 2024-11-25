@@ -1,4 +1,5 @@
-use std::io::{self, BufRead, Write};
+#![allow(dead_code)]
+use std::io::{self, Write};
 
 use anyhow::Result;
 use expressions::Expressions;
@@ -6,7 +7,7 @@ use inkwell::context::Context;
 use lang::backends::llvm::{jit::ListLayout, CompiledExpr};
 
 use crate::lang::backends::llvm::{
-    codegen::{compile_all_exprs, CodeGen},
+    codegen::compile_all_exprs,
     jit::{ExplicitJitFn, ExplicitJitListFn, ImplicitJitFn, ImplicitJitListFn},
 };
 

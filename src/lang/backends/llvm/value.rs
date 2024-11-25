@@ -1,12 +1,7 @@
-use anyhow::bail;
-use inkwell::{
-    types::{BasicMetadataTypeEnum, BasicType},
-    values::{
-        AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue, IntValue, PointerValue,
+use inkwell::values::{
+        AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, FloatValue,
         StructValue,
-    },
-    AddressSpace,
-};
+    };
 
 use super::types::{ListType, ValueType};
 
