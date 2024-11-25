@@ -6,7 +6,7 @@ use inkwell::context::Context;
 use lang::backends::llvm::{jit::ListLayout, CompiledExpr};
 
 use crate::lang::backends::llvm::{
-    codegen::CodeGen,
+    codegen::{compile_all_exprs, CodeGen},
     jit::{ExplicitJitFn, ExplicitJitListFn, ImplicitJitFn, ImplicitJitListFn},
 };
 
@@ -26,11 +26,7 @@ fn main() -> Result<()> {
         let line = input.trim();
 
         if line == "compile" {
-            for (_, err) in &expressions.errors {
-                println!("err: {err}");
-            }
-            let mut codegen = CodeGen::new(&context, &expressions);
-            let compiled = codegen.compile_all_exprs();
+            let compiled = compile_all_exprs(&context, &expressions);
 
             for expr in compiled.compiled {
                 match expr {
@@ -51,7 +47,7 @@ fn main() -> Result<()> {
                             },
                         }
                     }
-                    CompiledExpr::Implicit { lhs, op, rhs } => {
+                    CompiledExpr::Implicit { lhs, rhs, .. } => {
                         println!("got implicit");
                         let x = get_user_value();
                         let y = get_user_value();
@@ -84,7 +80,9 @@ fn main() -> Result<()> {
                 }
             }
         } else {
-            expressions.add_expr(&line.to_string());
+            _ = expressions.add_expr(&line.to_string()).inspect_err(|err| {
+                println!("err: {err}");
+            });
         }
     }
 }

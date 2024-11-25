@@ -15,7 +15,6 @@ impl From<u32> for ExpressionId {
 #[derive(Debug)]
 pub struct Expressions {
     pub exprs: HashMap<ExpressionId, Expr>,
-    pub errors: HashMap<ExpressionId, String>,
     idents: HashMap<String, ExpressionId>,
 
     max_id: u32,
@@ -26,7 +25,6 @@ impl Expressions {
         Self {
             exprs: Default::default(),
             idents: Default::default(),
-            errors: Default::default(),
             max_id: 0,
         }
     }
@@ -44,24 +42,17 @@ impl Expressions {
     }
 
     #[allow(unused_must_use)]
-    pub fn add_expr(&mut self, s: &str) -> ExpressionId {
-        self.set_expr(self.max_id, s);
+    pub fn add_expr(&mut self, s: &str) -> Result<ExpressionId> {
+        self.set_expr(self.max_id, s)?;
         self.max_id += 1;
-        (self.max_id - 1).into()
+        Ok((self.max_id - 1).into())
     }
 
-    pub fn set_expr(&mut self, id: impl Into<ExpressionId>, s: &str) {
+    pub fn set_expr(&mut self, id: impl Into<ExpressionId>, s: &str) -> Result<()> {
         let k = id.into();
-        let expr = self.parse_expr(&s, k);
-        match expr {
-            Ok(expr) => {
-                dbg!(&expr);
-                self.exprs.insert(k, expr);
-            }
-            Err(e) => {
-                self.errors.insert(k, e.to_string());
-            }
-        }
+        self.parse_expr(s, k).map(|expr| {
+            self.exprs.insert(k, expr);
+        })
     }
 
     pub fn get_expr(&self, name: &str) -> Option<&Expr> {
