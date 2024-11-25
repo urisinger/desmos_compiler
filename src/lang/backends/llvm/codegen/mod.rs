@@ -29,7 +29,6 @@ pub fn compile_all_exprs<'ctx>(
     exprs: &Expressions,
 ) -> CompiledExprs<'ctx> {
     let mut codegen = CodeGen::new(context, exprs);
-    let mut compiled_functions = Vec::new();
 
     let execution_engine = codegen
         .module
@@ -69,95 +68,102 @@ pub fn compile_all_exprs<'ctx>(
             execution_engine.add_global_mapping(&function, p as usize);
         });
 
+    let mut compiled_exprs = CompiledExprs::new();
+
     for (id, expr) in &exprs.exprs {
         match expr {
             Expr::Implicit { lhs, rhs, .. } => {
                 let args = [ValueType::Number, ValueType::Number];
 
                 let lhs_name = format!("implicit_{}_lhs", id.0);
-                codegen
-                    .compile_fn(&lhs_name, lhs, &args)
-                    .expect("Failed to compile lhs");
-                compiled_functions.push((lhs_name, *id, "implicit_lhs"));
+                _ = codegen.compile_fn(&lhs_name, lhs, &args).inspect_err(|e| {
+                    compiled_exprs.errors.insert(*id, e.to_string());
+                });
 
                 let rhs_name = format!("implicit_{}_rhs", id.0);
-                codegen
-                    .compile_fn(&rhs_name, rhs, &args)
-                    .expect("Failed to compile rhs");
-                compiled_functions.push((rhs_name, *id, "implicit_rhs"));
+                _ = codegen.compile_fn(&rhs_name, rhs, &args).inspect_err(|e| {
+                    compiled_exprs.errors.insert(*id, e.to_string());
+                });
             }
             Expr::Explicit { expr } => {
                 let name = format!("explicit_{}", id.0);
 
                 let args = vec![ValueType::Number];
-                codegen
-                    .compile_fn(&name, expr, &args)
-                    .expect("Failed to compile explicit function");
-                compiled_functions.push((name, *id, "explicit"));
+                _ = codegen.compile_fn(&name, expr, &args).inspect_err(|e| {
+                    compiled_exprs.errors.insert(*id, e.to_string());
+                });
             }
             _ => {}
         }
     }
-
-    let mut compiled_exprs = Vec::new();
 
     for (id, expr) in &exprs.exprs {
         match expr {
             Expr::Implicit { op, .. } => {
                 let lhs_name = format!("implicit_{}_lhs", id.0);
-                let lhs = unsafe {
+                let lhs_result = unsafe {
                     ImplicitJitFn::from_function(
                         &lhs_name,
                         &execution_engine,
-                        codegen.return_types[&lhs_name],
+                        codegen
+                            .return_types
+                            .get(&lhs_name)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                panic!("Return type not found for lhs: {}", lhs_name);
+                            }),
                     )
-                }
-                .expect("Failed to retrieve compiled lhs");
+                };
 
                 let rhs_name = format!("implicit_{}_rhs", id.0);
-                let rhs = unsafe {
+                let rhs_result = unsafe {
                     ImplicitJitFn::from_function(
                         &rhs_name,
                         &execution_engine,
-                        codegen.return_types[&rhs_name],
+                        *codegen.return_types.get(&rhs_name).unwrap_or_else(|| {
+                            panic!("Return type not found for rhs: {}", rhs_name);
+                        }),
                     )
-                }
-                .expect("Failed to retrieve compiled rhs");
+                };
 
-                compiled_exprs.push(CompiledExpr::Implicit { lhs, op: *op, rhs });
+                let result = match (lhs_result, rhs_result) {
+                    (Ok(lhs), Ok(rhs)) => Ok(CompiledExpr::Implicit { lhs, op: *op, rhs }),
+                    (Err(e), _) => Err(e),
+                    (_, Err(e)) => Err(e),
+                };
+
+                compiled_exprs.insert(*id, result);
             }
             Expr::Explicit { .. } => {
                 let name = format!("explicit_{}", id.0);
 
-                let lhs = unsafe {
+                let result = unsafe {
                     ExplicitJitFn::from_function(
                         &name,
                         &execution_engine,
-                        codegen.return_types[&name],
+                        *codegen.return_types.get(&name).unwrap_or_else(|| {
+                            panic!("Return type not found for explicit function: {}", name);
+                        }),
                     )
-                }
-                .expect("Failed to retrieve compiled explicit function");
+                    .map(|lhs| CompiledExpr::Explicit { lhs })
+                };
 
-                compiled_exprs.push(CompiledExpr::Explicit { lhs });
+                compiled_exprs.insert(*id, result);
             }
             _ => {}
         }
     }
 
-    codegen.module.print_to_stderr();
-
-    CompiledExprs {
-        compiled: compiled_exprs,
-    }
+    compiled_exprs
 }
 
 pub struct CodeGen<'ctx, 'expr> {
-    pub context: &'ctx inkwell::context::Context,
     pub module: Module<'ctx>,
-    pub builder: Builder<'ctx>,
-    pub exprs: &'expr Expressions,
-
     pub return_types: HashMap<String, ValueType>,
+
+    context: &'ctx inkwell::context::Context,
+    builder: Builder<'ctx>,
+    exprs: &'expr Expressions,
 
     list_type: StructType<'ctx>,
 }
@@ -208,7 +214,9 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                     let block = self.builder.get_insert_block();
                     let function = self.compile_fn(&specialized_name, rhs, types);
 
-                    if let Some(b) = block { self.builder.position_at_end(b) }
+                    if let Some(b) = block {
+                        self.builder.position_at_end(b)
+                    }
 
                     Ok((function?, self.return_types[name]))
                 }
@@ -233,7 +241,9 @@ impl<'ctx, 'expr> CodeGen<'ctx, 'expr> {
                     let block = self.builder.get_insert_block();
                     let compute_global = self.compile_fn(name, rhs, &[])?;
 
-                    if let Some(b) = block { self.builder.position_at_end(b) }
+                    if let Some(b) = block {
+                        self.builder.position_at_end(b)
+                    }
 
                     Value::from_basic_value_enum(
                         self.builder

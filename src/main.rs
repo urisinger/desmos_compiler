@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::io::{self, Write};
 
 use anyhow::Result;
@@ -11,8 +10,8 @@ use crate::lang::backends::llvm::{
     jit::{ExplicitJitFn, ExplicitJitListFn, ImplicitJitFn, ImplicitJitListFn},
 };
 
-mod expressions;
-mod lang;
+pub mod expressions;
+pub mod lang;
 
 fn main() -> Result<()> {
     let context = Context::create();
@@ -29,7 +28,7 @@ fn main() -> Result<()> {
         if line == "compile" {
             let compiled = compile_all_exprs(&context, &expressions);
 
-            for expr in compiled.compiled {
+            for (_, expr) in compiled.compiled {
                 match expr {
                     CompiledExpr::Explicit { lhs } => {
                         let x = get_user_value();

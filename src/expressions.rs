@@ -20,13 +20,19 @@ pub struct Expressions {
     max_id: u32,
 }
 
-impl Expressions {
-    pub fn new() -> Self {
+impl Default for Expressions {
+    fn default() -> Self {
         Self {
             exprs: Default::default(),
             idents: Default::default(),
             max_id: 0,
         }
+    }
+}
+
+impl Expressions {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn remove_expr(&mut self, id: impl Into<ExpressionId>) {
